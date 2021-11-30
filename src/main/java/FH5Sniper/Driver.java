@@ -7,80 +7,132 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.Locale;
 
 @SuppressWarnings("BusyWait")
 public class Driver {
     private static Robot robot;
     private static Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-    
-    public static void main(String[] args) throws AWTException, InterruptedException, IOException {
+
+    public static void main(String[] args) throws AWTException, InterruptedException, IOException, TesseractException {
         robot = new Robot();
         ScreenManager.init(robot);
-        
+
         while (true) {
             Color selectionColor = new Color(255, 0, 134);
             Color detailsBarColor = new Color(52, 23, 53);
             Color auctionHouseColor = new Color(255, 222, 57);
-            
-            waitForColor(selectionColor, 322, 400);
+
+            waitForColor(selectionColor, 322, 400, 100);
             System.out.println("Search Auctions has appeared. Clicking...");
             clickKey(KeyEvent.VK_ENTER); // Click search auctions
-            waitForColor(selectionColor, 700, 725);
+            
+            waitForColor(selectionColor, 700, 725, 0);
             System.out.println("Filters have appeared. Clicking...");
             clickKey(KeyEvent.VK_ENTER); // Confirm search filters
-            
-            waitForColor(auctionHouseColor, 350, 180);
+
+            waitForColor(auctionHouseColor, 85, 180, 200);
             System.out.println("The auction has loaded.");
 
             BufferedImage ss = ScreenManager.capture(new Rectangle(screenSize));
-            if (isColorAtCoords(ss, selectionColor, 800, 215)) {
+            if (isColorAtCoords(ss, selectionColor, 800, 215)) { // Checking for a listing (the first listing will be selected)
                 // Buy
-                clickKey(KeyEvent.VK_Y); // Open auction options
-                waitForColor(selectionColor, 1200, 475);
+                // clickKey(KeyEvent.VK_Y); // Open auction options TODO: Remove this line
+                waitForColorWhileClicking(selectionColor, 1200, 475, 0, KeyEvent.VK_Y); // Spam Y to open aunction options
                 System.out.println("Buy out button has appeared. Moving to it...");
                 clickKey(KeyEvent.VK_DOWN); // Move to buy out button
-                waitForColor(selectionColor, 1200, 525);
+                
+                waitForColor(selectionColor, 1200, 525, 0);
                 System.out.println("Moved to buy out button. Clicking...");
                 clickKey(KeyEvent.VK_ENTER); // Click buy out button
-                waitForColor(detailsBarColor, 750, 480);
+                
+                waitForColor(detailsBarColor, 750, 480, 200);
                 System.out.println("Buy out window appeared. Clicking yes...");
                 clickKey(KeyEvent.VK_ENTER); // Click yes on buy out confirmation dialog
-                waitForColor(detailsBarColor, 750, 518);
+                
+                waitForColor(detailsBarColor, 750, 518, 200);
                 System.out.println("Successful buyout dialog appeared. Closing...");
                 clickKey(KeyEvent.VK_ENTER); // Close buyout successful screen
-                waitForColor(selectionColor, 750, 550);
+                
+                waitForColor(selectionColor, 750, 550, 0);
                 System.out.println("Collect car button appeared. Clicking...");
                 clickKey(KeyEvent.VK_ENTER); // Click collect car
-                waitForColor(detailsBarColor, 750, 518);
+                
+                waitForColor(detailsBarColor, 750, 518, 0);
                 System.out.println("Successful car claim dialog appeared. Closing...");
                 clickKey(KeyEvent.VK_ENTER); // Close successful car claim dialog
-                waitForColor(selectionColor, 700, 580);
+                
+                waitForColor(selectionColor, 700, 580, 0);
                 System.out.println("Auction options window appeared. Closing...");
                 clickKey(KeyEvent.VK_ESCAPE); // Close auction options window
-                waitForColor(auctionHouseColor, 350, 180);
+                
+                waitForColor(auctionHouseColor, 85, 180, 200);
                 System.out.println("Auction house appeared. Closing...");
                 clickKey(KeyEvent.VK_ESCAPE); // Close out of auction house
                 
+
+                BufferedImage buyoutCrop = ss.getSubimage(1550, 800, 255, 30);
+                BufferedImage buyoutCropBW = ScreenManager.toBlackWhite(buyoutCrop);
+                BufferedImage buyoutCropBWInvert = ScreenManager.invert(buyoutCropBW);
+
+                String priceStr = ScreenManager.getText(buyoutCropBWInvert).toLowerCase();
+                priceStr = priceStr.replaceAll("[^0-9]", "");
+                int price = Integer.parseInt(priceStr);
+
+                saveBuyLog("Toyota Trueno", price);
+
                 return; // TODO: REMOVE
-                
-            } else {
+
+            } else { // No listings available, go back to search auctions
                 clickKey(KeyEvent.VK_ESCAPE);
             }
         }
     }
-    
+
+    public static void saveBuyLog(String car, int price) throws IOException {
+        File file = new File("success.log");
+        //noinspection ResultOfMethodCallIgnored
+        file.createNewFile();
+
+        FileWriter fw = new FileWriter("success.log", true);
+        SimpleDateFormat formatter = new SimpleDateFormat("MM-dd-yyyy hh:mm:ss aa");
+        Date date = new Date(System.currentTimeMillis());
+
+        fw.write(formatter.format(date) + " | Purchased " + car + " for $" + price + "\n");
+        fw.close();
+    }
+
     public static boolean isColorAtCoords(BufferedImage img, Color color, int x, int y) {
         Color curColor = new Color(img.getRGB(x, y));
         return curColor.equals(color);
     }
-    
-    public static void waitForColor(Color color, int x, int y) throws InterruptedException {
+
+    public static void waitForColorWhileClicking(Color color, int x, int y, int exitDelay, int key) throws InterruptedException {
         while (true) {
             BufferedImage ss = ScreenManager.capture(new Rectangle(screenSize));
             if (isColorAtCoords(ss, color, x, y)) {
-                Thread.sleep(100);
+                Thread.sleep(exitDelay);
+                return;
+            }
+            clickKey(key);
+            Thread.sleep(100);
+        }
+    }
+
+    public static void waitForColor(Color color, int x, int y, int exitDelay) throws InterruptedException {
+        while (true) {
+            BufferedImage ss = ScreenManager.capture(new Rectangle(screenSize));
+            if (isColorAtCoords(ss, color, x, y)) {
+                Thread.sleep(exitDelay);
                 return;
             }
         }
@@ -164,7 +216,7 @@ public class Driver {
                     break;
                 }
             }
-            
+
             Thread.sleep(1000);
         }
     }
